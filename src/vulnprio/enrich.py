@@ -16,17 +16,23 @@ EPSS_URL = "https://api.first.org/data/v1/epss"
 NVD_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 EPSS_BATCH = 100  # FIRST caps the `cve` param at 2000 chars; 100 IDs stays well under
 NVD_MAX_LOOKUPS = 5  # public NVD API allows 5 requests / 30 s without a key
-NVD_BUDGET_S = 8.0  # keep ingest well inside API Gateway's 30 s integration timeout
+# One deadline for all feed calls: 15 s + one 5 s timeout overrun + parse/store stays under the 29 s Lambda timeout.
+ENRICH_BUDGET_S = 15.0
 CACHE_TTL_S = 24 * 3600
 
 log = logging.getLogger(__name__)
+
+
+def exploit_data_errors(errors: list[str]) -> list[str]:
+    """KEV/EPSS failures change tiers; NVD only backfills CVSS (P3), so its rate limiting is tolerated."""
+    return [e for e in errors if not e.startswith("NVD")]
 
 
 class Enricher:
     """Holds a per-process cache so a warm Lambda makes ~zero external calls."""
 
     def __init__(self, client: httpx.Client | None = None):
-        self.client = client or httpx.Client(timeout=10.0, headers={"User-Agent": "vulnprio"})
+        self.client = client or httpx.Client(timeout=5.0, headers={"User-Agent": "vulnprio"})
         self._kev: dict[str, dict] = {}
         self._kev_at = float("-inf")
         self.kev_version: str | None = None
@@ -48,13 +54,15 @@ class Enricher:
         self.kev_version = doc.get("catalogVersion")
         self._kev_at = time.monotonic()
 
-    def _load_epss(self, cves: list[str]) -> None:
+    def _load_epss(self, cves: list[str], deadline: float) -> None:
         if time.monotonic() - self._scores_at > CACHE_TTL_S:
             self._epss.clear()
             self._nvd.clear()
             self._scores_at = time.monotonic()
         todo = [c for c in cves if c not in self._epss]
         for i in range(0, len(todo), EPSS_BATCH):
+            if time.monotonic() > deadline:
+                raise TimeoutError("enrichment budget spent")  # finished batches stay cached for the next ingest
             batch = todo[i : i + EPSS_BATCH]
             resp = self.client.get(EPSS_URL, params={"cve": ",".join(batch), "limit": len(batch)})
             resp.raise_for_status()
@@ -85,6 +93,7 @@ class Enricher:
         """Mutate findings in place; return a list of human-readable enrichment errors."""
         errors = []
         cves = sorted({f.cve for f in findings if f.cve})
+        deadline = time.monotonic() + ENRICH_BUDGET_S
 
         try:
             self._load_kev()
@@ -97,8 +106,8 @@ class Enricher:
                 f.kev, f.kev_date_added, f.kev_ransomware = True, hit["date_added"], hit["ransomware"]
 
         try:
-            self._load_epss(cves)
-        except (httpx.HTTPError, ValueError, KeyError) as e:
+            self._load_epss(cves, deadline)
+        except (httpx.HTTPError, ValueError, KeyError, TimeoutError) as e:
             log.warning("epss enrichment failed: %s", e)
             errors.append("EPSS unavailable (some scores missing)")
         for f in findings:
@@ -106,7 +115,6 @@ class Enricher:
                 f.epss, f.epss_percentile, f.epss_date = hit
 
         missing = sorted({f.cve for f in findings if f.cve and f.cvss is None})
-        deadline = time.monotonic() + NVD_BUDGET_S
         scores = {}
         for cve in missing[:NVD_MAX_LOOKUPS]:
             if time.monotonic() > deadline:

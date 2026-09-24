@@ -1,6 +1,7 @@
 import httpx
 
-from vulnprio.enrich import EPSS_BATCH, Enricher
+from vulnprio import enrich
+from vulnprio.enrich import EPSS_BATCH, Enricher, exploit_data_errors
 from vulnprio.parsers import Finding
 
 KEV_DOC = {
@@ -116,3 +117,11 @@ def test_failed_kev_refresh_keeps_last_catalog():
     f = Finding("CVE-2021-44228", "CVE-2021-44228", "a", cvss=1.0)
     assert enricher.enrich([f]) == ["CISA KEV unavailable"]
     assert f.kev
+
+
+def test_spent_budget_stops_epss_and_nvd(monkeypatch):
+    monkeypatch.setattr(enrich, "ENRICH_BUDGET_S", -1.0)  # deadline already passed
+    enricher, feeds = make()
+    errors = enricher.enrich([Finding("CVE-2021-44228", "CVE-2021-44228", "log4j")])
+    assert feeds.calls == ["www.cisa.gov"]  # KEV is one call; EPSS/NVD batches are skipped
+    assert exploit_data_errors(errors) == ["EPSS unavailable (some scores missing)"]

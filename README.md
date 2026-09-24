@@ -84,7 +84,7 @@ A request flows **parse → enrich → score → store**, and each step is a sma
 | Module | Job |
 |---|---|
 | [`parsers.py`](src/vulnprio/parsers.py) | Detects Trivy JSON, Grype JSON, SARIF 2.1.0 or CSV from its structure and normalizes it into `Finding`s. Treats every input as hostile: size, nesting and finding-count caps, and any malformed shape returns a 400, never a 500. |
-| [`enrich.py`](src/vulnprio/enrich.py) | Looks up KEV (the full catalog), EPSS (batched 100 CVEs per call) and NVD (a CVSS fallback capped at 5 lookups within an 8 s budget). Each source fails independently and the scan records which data is missing. |
+| [`enrich.py`](src/vulnprio/enrich.py) | Looks up KEV (the full catalog), EPSS (batched 100 CVEs per call) and NVD (a CVSS fallback capped at 5 lookups), all under one 15 s deadline. Each source fails independently and the scan records which data is missing. |
 | [`scoring.py`](src/vulnprio/scoring.py) | Assigns tiers, ranks within each tier, and writes a human-readable `reasons[]` for every finding. |
 | [`store.py`](src/vulnprio/store.py) | Stores to DynamoDB, with findings pre-sorted in the sort key (`F#{priority}#{rank}`) so a paginated `?priority=P1` read is a single `Query`. |
 | [`api.py`](src/vulnprio/api.py) / [`cli.py`](src/vulnprio/cli.py) | Exposes the pipeline as a REST API and as `analyze` / `gate` / `push` commands. |

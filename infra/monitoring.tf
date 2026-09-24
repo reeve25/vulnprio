@@ -81,16 +81,17 @@ resource "aws_cloudwatch_metric_alarm" "api_5xx_rate" {
   }
 }
 
-# 3 of 3 fifteen-minute periods: a sustained KEV/EPSS/NVD outage, not one flaky call.
+# KEV/EPSS misses (NVD excluded) summed per hour: one flaky call doesn't page, a second in the hour does.
+# Hourly, not N consecutive short periods: CI traffic is bursty, and empty periods would keep a
+# day-long outage from ever paging.
 resource "aws_cloudwatch_metric_alarm" "enrichment_errors" {
   alarm_name          = "${var.name}-enrichment-errors"
   namespace           = "vulnprio"
   metric_name         = "EnrichmentErrors"
   statistic           = "Sum"
-  period              = 900
-  evaluation_periods  = 3
-  datapoints_to_alarm = 3
-  threshold           = 1
+  period              = 3600
+  evaluation_periods  = 1
+  threshold           = 2
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alarms.arn]

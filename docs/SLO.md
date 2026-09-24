@@ -10,7 +10,7 @@ nothing is deployed (DECISIONS #9).
 | # | SLI | Measured from | Target (28-day window) | Why this number |
 |---|-----|---------------|------------------------|-----------------|
 | 1 | **Availability**: share of API requests that don't return 5xx | `AWS/ApiGateway` `5xx` ÷ `Count` | **99.5%** | CI retries once, so an occasional failure is fine. That leaves ~3.4 h of budget per 28 days. 99.9% would need multi-region, which this doesn't justify. |
-| 2 | **Ingest latency**: `POST /scans` completes in < 10 s | `vulnprio/IngestDuration` p99 | **99%** of ingests | API Gateway's hard 30 s limit sets the ceiling. A cold ingest with nothing cached (KEV + 7 EPSS batches + up to 5 NVD calls) is the worst case. Warm Lambdas cache feeds for 24 h, so a typical run takes about 1 s. |
+| 2 | **Ingest latency**: `POST /scans` completes in < 10 s | `vulnprio/IngestDuration` p99 | **99%** of ingests | API Gateway's hard 30 s limit sets the ceiling. A cold ingest with nothing cached (KEV + up to 30 EPSS batches + up to 5 NVD calls) is the worst case. One shared 15 s enrichment deadline with 5 s per-call timeouts keeps it under the 29 s Lambda timeout; anything unfinished is recorded as an enrichment error instead of timing out. Warm Lambdas cache feeds for 24 h, so a typical run takes about 1 s. |
 | 3 | **Read latency**: `GET` endpoints complete in < 500 ms | `AWS/ApiGateway` `Latency` p99 | **99%** of reads | These are single-partition DynamoDB queries. Anything slower points to cold starts or oversized pages. |
 | 4 | **Enrichment completeness**: ingests with KEV and EPSS both applied | `vulnprio/EnrichmentErrors` = 0 | **99%** of ingests | A scan ranked without KEV/EPSS still returns 201, so it "succeeds", but it's the worst failure mode: every finding falls to P3/P4 and looks safe. It gets its own SLI so HTTP success can't hide it. |
 
@@ -34,10 +34,10 @@ Alarms page on symptoms that burn budget. They don't page on every error. Every 
 | Alarm (`infra/monitoring.tf`) | Condition | Protects | First thing to check |
 |-------------------------------|-----------|----------|----------------------|
 | `vulnprio-api-5xx-rate` | > 1% 5xx over 15 min | SLI 1 | Lambda logs filtered by `level=ERROR`. Correlate with `x-request-id`. |
-| `vulnprio-lambda-errors` | ≥ 1 unhandled error in 5 min | SLI 1 | Unhandled exceptions are bugs. Malformed input is a 400 by design, not a 500. |
+| `vulnprio-lambda-errors` | ≥ 1 invocation error in 5 min | SLI 1 | Timeouts, OOM and crashes. App exceptions don't land here: Lambda Web Adapter turns them into HTTP 500s, which the 5xx-rate alarm catches. |
 | `vulnprio-lambda-throttles` | ≥ 1 throttle in 5 min | SLI 1 | Reserved concurrency (`infra/lambda.tf`) vs. a CI burst. |
 | `vulnprio-ingest-p99` | p99 `IngestDuration` > 20 s | SLI 2 | Leaves 10 s of headroom before the hard 30 s timeout. Usually a slow upstream feed. |
-| `vulnprio-enrichment-errors` | errors in 3 consecutive 15-min periods | SLI 4 | Upstream outage (CISA/FIRST status). A single flaky call won't page. A sustained outage will. |
+| `vulnprio-enrichment-errors` | ≥ 2 KEV/EPSS misses in 1 h | SLI 4 | Upstream outage (CISA/FIRST status). A single flaky call won't page; a second miss in the same hour will, even at low CI traffic. |
 
 A 14.4× fast-burn / 1× slow-burn multi-window alert pair (Google SRE workbook ch. 5) is the next step up from these
 static thresholds. It isn't worth it before there's real traffic to tune against.

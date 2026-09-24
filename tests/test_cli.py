@@ -76,3 +76,8 @@ def test_gate_fails_closed_when_exploit_data_missing(scan, tmp_path, monkeypatch
     assert cli.main(["gate", str(scan), "--waivers", str(tmp_path / "none")]) == 1
     out = capsys.readouterr().out
     assert "enrichment failed: CISA KEV unavailable" in out and "NVD" not in out
+
+
+def test_gate_rejects_unknown_tiers(scan, capsys):
+    assert cli.main(["gate", str(scan), "--fail-on", "P1;P2"]) == 2
+    assert "--fail-on" in capsys.readouterr().err

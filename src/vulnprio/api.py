@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from .enrich import Enricher
+from .enrich import Enricher, exploit_data_errors
 from .obs import emit_metrics, log_event, setup_logging
 from .parsers import ParseError
 from .scoring import PRIORITIES, analyze
@@ -89,7 +90,8 @@ async def create_scan(
     start = time.perf_counter()
     try:
         # ponytail: sync enrichment in the request path; move to S3-event worker if scans outgrow the 30 s limit
-        report, errors, summary = analyze(raw, enricher)
+        # Blocking httpx/boto3 calls run in a thread so one ingest doesn't stall /healthz under uvicorn.
+        report, errors, summary = await run_in_threadpool(analyze, raw, enricher)
     except ParseError as e:
         raise HTTPException(400, str(e)) from None
     scan_id = uuid.uuid4().hex
@@ -103,7 +105,7 @@ async def create_scan(
         "enrichment_errors": errors,
         "kev_catalog_version": enricher.kev_version,
     }
-    store.save_scan(meta, report.findings, raw)
+    await run_in_threadpool(store.save_scan, meta, report.findings, raw)
     duration = time.perf_counter() - start
     log_event(log, "scan ingested", scan_id=scan_id, format=report.format, **summary)
     emit_metrics(
@@ -111,7 +113,7 @@ async def create_scan(
             "ScansIngested": (1, "Count"),
             "FindingsIngested": (summary["total"], "Count"),
             "ActNowFindings": (summary["act_now"], "Count"),
-            "EnrichmentErrors": (len(errors), "Count"),
+            "EnrichmentErrors": (len(exploit_data_errors(errors)), "Count"),  # SLI 4: KEV/EPSS only
             "IngestDuration": (round(duration * 1000, 1), "Milliseconds"),
         }
     )

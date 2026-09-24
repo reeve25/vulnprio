@@ -11,7 +11,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
-from vulnprio.enrich import Enricher
+from vulnprio.enrich import Enricher, exploit_data_errors
 from vulnprio.scoring import analyze
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -36,7 +36,8 @@ def main() -> int:
         report, errors, summary = analyze((ROOT / "samples" / file).read_bytes(), enricher)
         if errors:
             print(f"{file}: enrichment errors {errors}", file=sys.stderr)
-            return 1  # don't publish a demo with silently missing data
+        if exploit_data_errors(errors):
+            return 1  # never publish rankings without KEV/EPSS; missing NVD backfill only touches P3
         scan_id = f"demo-{i}"
         meta = {
             "scan_id": scan_id,

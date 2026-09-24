@@ -10,9 +10,9 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from .enrich import Enricher
+from .enrich import Enricher, exploit_data_errors
 from .parsers import ParseError
-from .scoring import analyze
+from .scoring import PRIORITIES, analyze
 
 
 def load_waivers(path: Path, today: date) -> tuple[set[str], list[str]]:
@@ -73,6 +73,9 @@ def cmd_analyze(args) -> int:
 
 def cmd_gate(args) -> int:
     fail_on = {p.strip().upper() for p in args.fail_on.split(",")}
+    if not fail_on <= set(PRIORITIES):  # a typo must not turn the gate into a no-op
+        print(f"error: --fail-on takes a comma list of {','.join(PRIORITIES)}", file=sys.stderr)
+        return 2
     waived, problems = load_waivers(Path(args.waivers), date.today())
     report, errors, summary = analyze(Path(args.file).read_bytes(), Enricher())
     print(_headline(summary))
@@ -90,8 +93,7 @@ def cmd_gate(args) -> int:
         print(f"\nFAIL: {len(blocking)} finding(s) in {','.join(sorted(fail_on))} with a fix available:")
         print(_table(blocking, len(blocking)))
     # Fail closed: without KEV/EPSS every finding looks like P3/P4 and the gate would pass vacuously.
-    # NVD only backfills CVSS (P3), so its rate limiting shouldn't break builds.
-    problems += [f"enrichment failed: {e}" for e in errors if not e.startswith("NVD")]
+    problems += [f"enrichment failed: {e}" for e in exploit_data_errors(errors)]
     for p in problems:
         print(f"FAIL: {p}")
     if not blocking and not problems:
