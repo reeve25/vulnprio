@@ -109,4 +109,6 @@ footer { font-size: 12px; padding: 8px 0 40px; }
   .headline { font-size: 17px; }
   .tile .value { font-size: 26px; }
   #scatter { height: 260px; }
+  /* overflow-wrap:anywhere drops these to ~1ch min-content, so auto layout crushes them; the table scrolls anyway */
+  td.pkg, td.ver { min-width: 150px; }
 }
