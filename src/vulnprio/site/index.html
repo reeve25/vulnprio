@@ -1,1 +1,77 @@
-<!doctype html><title>vulnprio</title><p>Dashboard coming soon.</p>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'">
+<title>vulnprio dashboard</title>
+<meta name="description" content="Container vulnerabilities ranked by real-world exploitation (CISA KEV + FIRST EPSS), not CVSS alone.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23d03b3b'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>vulnprio</h1>
+    <p class="tag">Container vulnerabilities ranked by real-world exploitation (CISA KEV + FIRST EPSS), not severity alone.</p>
+  </div>
+  <nav class="links">
+    <a href="https://github.com/reeve25/vulnprio">Source on GitHub</a>
+  </nav>
+</header>
+
+<main>
+  <section class="controls" aria-label="Scan selection">
+    <label for="scan">Scan</label>
+    <select id="scan"></select>
+    <span id="mode" class="muted"></span>
+    <form id="upload" hidden>
+      <label for="file" class="button">Upload a scan…</label>
+      <input id="file" type="file" accept=".json,.sarif,.csv,.gz">
+    </form>
+  </section>
+
+  <p id="status" role="status" class="muted"></p>
+
+  <section id="headline" class="headline" aria-live="polite"></section>
+
+  <section class="tiles" aria-label="Summary">
+    <div class="tile"><span class="label">Findings</span><span class="value" id="t-total">–</span></div>
+    <div class="tile"><span class="label">HIGH / CRITICAL by severity</span><span class="value" id="t-hc">–</span><span class="sub">what severity-only triage asks you to fix</span></div>
+    <div class="tile accent"><span class="label">Act now (P1 + P2)</span><span class="value" id="t-act">–</span><span class="sub" id="t-act-sub"></span></div>
+    <div class="tile"><span class="label">Known exploited (CISA KEV)</span><span class="value" id="t-kev">–</span></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Severity says one thing, exploitation data says another</h2>
+      <p class="muted">Each dot is a finding: CVSS (impact) across, EPSS (probability of exploitation in the next 30 days, log scale) up. Most HIGH/CRITICAL findings sit near the bottom: they're unlikely to be exploited.</p>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="chart-wrap"><svg id="scatter" role="img" aria-labelledby="scatter-desc"><desc id="scatter-desc">Scatter plot of CVSS versus EPSS for every finding in the selected scan. The findings table below lists the same data.</desc></svg><div id="tip" class="tip" hidden></div></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Ranked findings</h2>
+      <p class="muted">Most urgent first. Tiers: <b>P1</b> in CISA KEV · <b>P2</b> EPSS ≥ 10% · <b>P3</b> EPSS ≥ 1% or CVSS ≥ 9.0 · <b>P4</b> everything else. Within a tier, findings with a fix come first.</p>
+    </div>
+    <div class="filters" role="group" aria-label="Filter findings">
+      <div class="chips" id="chips"></div>
+      <input id="q" type="search" placeholder="Filter by CVE or package" aria-label="Filter by CVE or package">
+      <label class="check"><input id="fixable" type="checkbox"> Fix available only</label>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Priority</th><th>Vulnerability</th><th>Package</th><th>Installed → fix</th><th class="num">EPSS</th><th class="num">CVSS</th><th>Severity</th><th>Why</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="more"><span id="count" class="muted"></span><button id="more" type="button" hidden>Show more</button></div>
+  </section>
+
+  <footer class="muted" id="foot"></footer>
+</main>
+</body>
+</html>

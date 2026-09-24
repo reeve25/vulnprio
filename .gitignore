@@ -21,4 +21,4 @@ build/
 crash.log
 .terraform.lock.hcl.bak
 # generated demo data
-site/data/
+/site/
