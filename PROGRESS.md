@@ -54,6 +54,53 @@ Be honest in interviews: the AWS stack is designed, validated and cost-estimated
 4. **Asset context:** weight tiers by exposure and data sensitivity (SSVC-style inputs).
 5. **Trend view:** per-image P1/P2 burn-down and time-to-remediate. Then replace the static alarms with multi-window burn-rate alerts.
 
+## Session 2 (2026-09-23)
+
+1. **Live demo verified.** Headless Chromium at 1440×900 and 390×844: 5 scans, 1,015 chart points, 100 table rows, no console or network errors.
+2. **Fixed a phone layout bug.** Table columns were crushed to one character wide. Pushed the fix; CI and Pages are green, and the check was re-run against the live site.
+3. **README now opens with a screenshot** of the live demo. The smoke check is saved as `scripts/check_demo.py`.
+4. **AWS deploy skipped.** There's no AWS CLI and no credentials on this machine. Nothing was created, and the resume bullet still says "never deployed".
+5. **Interview prep written** to `docs/interview-prep.md`: a pitch, 25 Q&As with file:line references, hard follow-ups, and flashcards. It's kept local and not committed.
+
+### Part A: live demo check
+- `scripts/check_demo.py` loads https://reeve25.github.io/vulnprio/ at desktop (1440×900) and phone (390×844) widths. It fails on:
+  - console errors or page errors
+  - failed requests or any HTTP status ≥ 400
+  - an empty chart, table or scan list, or a visible status message
+  - horizontal page scroll
+
+  Run it with `uv run --with playwright python scripts/check_demo.py`. Playwright is not a project dependency.
+- First run: passed at both widths.
+  - solr:8.11.0 showed 1,072 findings, 385 HIGH/CRITICAL, 83 act-now and 8 KEV.
+  - The KEV catalog was version 2026.09.23.
+- The screenshots showed a real bug. At 390 px the Package and "Installed → fix" columns wrapped one character per line. Root cause: `overflow-wrap: anywhere` drops those cells' min-content width to about 1ch, so table auto-layout shrank them instead of letting `.table-wrap` scroll.
+  - A first attempt, `table { min-width: 720px }`, didn't help. Measured column widths showed the extra width going to the Why column.
+  - The fix is `td.pkg, td.ver { min-width: 150px }` in the phone media query. Commit `9e393b6`.
+- Pushed; CI and Pages both passed on `b8ab54e`. Re-ran the check against the live site after deploy: both widths pass, and the new CSS is served.
+- Screenshots are in `docs/screenshots/` (`desktop`, `phone`, and `-chart` / `-table` variants of each). The desktop one now leads the README and replaces the older `docs/dashboard.png`.
+
+### Part B: AWS deploy (skipped)
+- There is no `aws` binary on the PATH in Git Bash or PowerShell, no `~/.aws`, and no `AWS_*` environment variables, so `aws sts get-caller-identity` could not run. As instructed, I skipped all of Part B.
+- Terraform isn't installed locally either (CI installs it).
+- **You need to:**
+  1. Create an AWS account and enable MFA on the root user.
+  2. Create an IAM Identity Center user.
+  3. Install AWS CLI v2 and run `aws configure sso` then `aws sso login`.
+  4. Install Terraform ≥ 1.11.
+
+  After that, Part B can run as written.
+- **Watch for on first apply:** a new account's Lambda concurrency quota may reject `reserved_concurrent_executions = 10` (`infra/lambda.tf:12`).
+- No AWS resources were created, so there's nothing to tear down. The Budget was not created, since there's no account.
+- Resume bullet is unchanged. It still correctly says the stack is designed and validated but never deployed. Don't use "deployed and load-tested" until Part B has actually run.
+
+### Part C: interview prep
+- `docs/interview-prep.md` contains:
+  - a 30-second pitch and a 2-minute walkthrough
+  - 25 questions across scoring, serverless and timeouts, data model, security, SRE and scaling, each citing file:line
+  - 12 hard follow-ups with honest answers (not deployed; the "84% fewer" framing; httpx timeouts aren't wall-clock; no tenancy; what the mocked `terraform test` does and doesn't prove)
+  - 27 flashcards
+- It's written as personal coaching ("say this", weak spots), not as design notes, so it isn't committed. It's excluded through `.git/info/exclude` rather than `.gitignore`, so its name doesn't show up in the public repo. Line numbers are pinned to commit `2801145`.
+
 ## Log
 - 2026-09-23 — Plan: wrote SPEC.md and DECISIONS.md, then had a review subagent critique them from a senior-infra and a recruiter angle. Revisions:
   - 4 MB sync upload cap
