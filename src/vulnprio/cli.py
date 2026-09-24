@@ -89,6 +89,9 @@ def cmd_gate(args) -> int:
     if blocking:
         print(f"\nFAIL: {len(blocking)} finding(s) in {','.join(sorted(fail_on))} with a fix available:")
         print(_table(blocking, len(blocking)))
+    # Fail closed: without KEV/EPSS every finding looks like P3/P4 and the gate would pass vacuously.
+    # NVD only backfills CVSS (P3), so its rate limiting shouldn't break builds.
+    problems += [f"enrichment failed: {e}" for e in errors if not e.startswith("NVD")]
     for p in problems:
         print(f"FAIL: {p}")
     if not blocking and not problems:

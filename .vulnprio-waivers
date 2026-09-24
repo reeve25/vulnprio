@@ -1,0 +1,3 @@
+# Waivers for `vulnprio gate`: one per line, `ID  YYYY-MM-DD(expiry)  reason`.
+# Expired or malformed lines fail the gate, so a waiver cannot quietly become permanent.
+# Example: CVE-2023-4863  2026-12-31  libwebp not reachable: image has no image decoding

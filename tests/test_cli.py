@@ -65,3 +65,14 @@ def test_bad_file_exits_2(tmp_path):
     bad.write_text("{}")
     assert cli.main(["analyze", str(bad)]) == 2
     assert cli.main(["analyze", str(tmp_path / "missing")]) == 2
+
+
+def test_gate_fails_closed_when_exploit_data_missing(scan, tmp_path, monkeypatch, capsys):
+    class DownEnricher(FakeEnricher):
+        def enrich(self, findings):
+            return ["CISA KEV unavailable", "NVD unavailable (some CVSS scores missing)"]
+
+    monkeypatch.setattr(cli, "Enricher", DownEnricher)
+    assert cli.main(["gate", str(scan), "--waivers", str(tmp_path / "none")]) == 1
+    out = capsys.readouterr().out
+    assert "enrichment failed: CISA KEV unavailable" in out and "NVD" not in out

@@ -39,7 +39,7 @@ def get_enricher() -> Enricher:
 
 @app.middleware("http")
 async def access_log(request: Request, call_next):
-    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
+    request_id = request.headers.get("x-request-id", "")[:64] or uuid.uuid4().hex  # client-supplied: bound it
     start = time.perf_counter()
     status = 500
     try:

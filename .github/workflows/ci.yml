@@ -1,0 +1,92 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Third-party actions are pinned to commit SHAs; scanners run as pinned containers/tools
+# so every step here is also a command you can run locally.
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Lint
+        run: uv run ruff check . && uv run ruff format --check .
+      - name: Unit tests
+        # store.py is covered by the integration job, so the unit gate sits below 100%
+        run: uv run pytest --cov --cov-report=term-missing --cov-fail-under=85
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      localstack:
+        image: localstack/localstack:4.14
+        ports: ["4566:4566"]
+        env:
+          SERVICES: s3,dynamodb
+        options: >-
+          --health-cmd "curl -sf localhost:4566/_localstack/health"
+          --health-interval 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: DynamoDB + S3 integration tests (LocalStack)
+        run: uv run pytest -m integration -v
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.13.5 # tests need mock_provider override_during (>= 1.11)
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+      - name: terraform test (mocked provider; nothing is created)
+        run: terraform test
+      - name: checkov
+        working-directory: .
+        run: pipx run checkov==3.3.19 -d infra --framework terraform --compact --quiet
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: docker build -t vulnprio:ci .
+      - name: Trivy image scan
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          aquasec/trivy:0.74.0 image --quiet --format json vulnprio:ci > trivy.json
+      - name: Gate on vulnprio's own ranking (dogfooding)
+        # Fails on fixable P1/P2 (KEV or EPSS >= 10%), on expired waivers, or if KEV/EPSS are unreachable.
+        run: uv run vulnprio gate trivy.json --fail-on P1,P2 --waivers .vulnprio-waivers
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: gitleaks (full history)
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 git /repo --no-banner --redact
