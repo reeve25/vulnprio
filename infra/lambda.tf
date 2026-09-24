@@ -53,7 +53,7 @@ data "aws_iam_policy_document" "lambda" {
   }
   statement {
     sid       = "Table"
-    actions   = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Query", "dynamodb:BatchWriteItem", "dynamodb:DescribeTable"]
+    actions   = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Query", "dynamodb:BatchWriteItem"]
     resources = [aws_dynamodb_table.this.arn]
   }
   statement {

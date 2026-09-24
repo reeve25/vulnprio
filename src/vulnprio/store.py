@@ -99,7 +99,3 @@ class Store:
             kwargs["ExclusiveStartKey"] = start
         resp = self.table.query(**kwargs)
         return [json.loads(i["d"]) for i in resp["Items"]], _cursor_encode(resp.get("LastEvaluatedKey"))
-
-    def ping(self) -> None:
-        """Cheap readiness check used by /readyz."""
-        self.table.load()
