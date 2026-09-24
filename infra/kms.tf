@@ -1,8 +1,9 @@
 # One customer-managed key for S3, DynamoDB, ECR, Lambda env vars, logs and SNS: one policy to audit, $1/month.
 resource "aws_kms_key" "this" {
-  description         = "${var.name} data at rest"
-  enable_key_rotation = true
-  policy              = data.aws_iam_policy_document.kms.json
+  description             = "${var.name} data at rest"
+  enable_key_rotation     = true
+  deletion_window_in_days = 7 # AWS minimum; a scheduled-for-deletion key isn't billed, but it lingers this long after destroy
+  policy                  = data.aws_iam_policy_document.kms.json
 }
 
 data "aws_iam_policy_document" "kms" {

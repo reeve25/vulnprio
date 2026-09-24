@@ -8,8 +8,8 @@ resource "aws_lambda_function" "this" {
   image_uri                      = "${aws_ecr_repository.this.repository_url}:${var.image_tag}"
   architectures                  = ["x86_64"] # matches the CI-built image
   memory_size                    = 1024
-  timeout                        = 29 # API Gateway's integration limit is 30 s; fail inside it, not after
-  reserved_concurrent_executions = 10 # cost/abuse ceiling
+  timeout                        = 29                       # API Gateway's integration limit is 30 s; fail inside it, not after
+  reserved_concurrent_executions = var.reserved_concurrency # cost/abuse ceiling
   kms_key_arn                    = aws_kms_key.this.arn
 
   environment {

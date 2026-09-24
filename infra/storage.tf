@@ -2,7 +2,8 @@ resource "aws_s3_bucket" "raw" {
   #checkov:skip=CKV_AWS_18:access logging needs a second bucket; API access logs + CloudTrail cover who uploaded what
   #checkov:skip=CKV_AWS_144:cross-region replication doubles cost for re-uploadable scan files
   #checkov:skip=CKV2_AWS_62:no consumer for event notifications (sync ingest, DECISIONS #14)
-  bucket = "${var.name}-raw-${local.account_id}" # account ID suffix: bucket names are global
+  bucket        = "${var.name}-raw-${local.account_id}" # account ID suffix: bucket names are global
+  force_destroy = var.allow_destroy
 }
 
 resource "aws_s3_bucket_public_access_block" "raw" {
@@ -93,7 +94,7 @@ resource "aws_dynamodb_table" "this" {
   billing_mode                = "PAY_PER_REQUEST"
   hash_key                    = "PK"
   range_key                   = "SK"
-  deletion_protection_enabled = true
+  deletion_protection_enabled = !var.allow_destroy
 
   attribute {
     name = "PK"

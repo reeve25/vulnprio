@@ -1,5 +1,6 @@
 resource "aws_ecr_repository" "this" {
   name                 = var.name
+  force_delete         = var.allow_destroy
   image_tag_mutability = "IMMUTABLE" # a tag always means the same bytes, so what was scanned is what runs
   image_scanning_configuration {
     scan_on_push = true

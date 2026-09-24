@@ -11,7 +11,7 @@ terraform {
   # backend "s3" {
   #   bucket       = "my-tfstate-bucket"
   #   key          = "vulnprio/terraform.tfstate"
-  #   region       = "us-east-1"
+  #   region       = "us-west-2"
   #   encrypt      = true
   #   use_lockfile = true # S3-native state locking (Terraform >= 1.10); no DynamoDB lock table needed
   # }
@@ -20,7 +20,7 @@ terraform {
 provider "aws" {
   region = var.region
   default_tags {
-    tags = { Project = "vulnprio" }
+    tags = { project = "vulnprio" } # lowercase: tag keys are case-sensitive; teardown checks filter on this exact key
   }
 }
 
