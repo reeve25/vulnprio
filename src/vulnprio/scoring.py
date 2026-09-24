@@ -12,7 +12,7 @@ operating points (0.088 for ~82% coverage); see docs/RESEARCH.md.
 
 from collections import Counter
 
-from .parsers import Finding
+from .parsers import Finding, Report, parse
 
 EPSS_URGENT = 0.10
 EPSS_PLAUSIBLE = 0.01
@@ -61,6 +61,14 @@ def rank(findings: list[Finding]) -> list[Finding]:
         findings,
         key=lambda f: (f.priority, not f.fixed_version, -(f.epss or 0.0), -(f.cvss or 0.0), f.vuln_id, f.package),
     )
+
+
+def analyze(data: bytes, enricher) -> tuple[Report, list[str], dict]:
+    """parse -> enrich -> rank -> summarize. Shared by the API, CLI, and demo builder."""
+    report = parse(data)
+    errors = enricher.enrich(report.findings)
+    report.findings = rank(report.findings)
+    return report, errors, summarize(report.findings)
 
 
 def summarize(findings: list[Finding]) -> dict:
