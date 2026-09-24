@@ -123,7 +123,25 @@ def test_long_strings_truncated():
 
 @pytest.mark.parametrize(
     "data",
-    [b"", b"   ", b"[1,2]", b'{"foo": 1}', b"\xff\xfe\x00bad", b"name,version\na,1\n", b"\x1f\x8bnot-gzip"],
+    [
+        b"",
+        b"   ",
+        b"[1,2]",
+        b'{"foo": 1}',
+        b"\xff\xfe\x00bad",
+        b"name,version\na,1\n",
+        b"\x1f\x8bnot-gzip",
+        # wrong-shaped JSON must be a 400, not a 500
+        b'{"SchemaVersion":2,"Results":"x"}',
+        b'{"SchemaVersion":2,"Results":[{"Vulnerabilities":[1]}]}',
+        b'{"matches":[null]}',
+        b'{"runs":[{"results":"x"}]}',
+        b'{"matches":[{"artifact":{"locations":{"a":1}}}]}',
+        b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\xff\xff",  # corrupt deflate stream
+        b"cve\n" + b"A" * 200_000,  # csv field limit
+        b"[" * 100_000,  # recursion
+    ],
+    ids=lambda d: repr(d[:24]),  # full 200 KB ids overflow Windows' env var limit (PYTEST_CURRENT_TEST)
 )
 def test_rejects_garbage(data):
     with pytest.raises(ParseError):
@@ -134,3 +152,19 @@ def test_gzip_bomb_rejected(monkeypatch):
     monkeypatch.setattr(parsers, "MAX_DECOMPRESSED", 1000)
     with pytest.raises(ParseError, match="too large"):
         parse(gzip.compress(b"x" * 5000))
+
+
+def test_trivy_without_results_is_an_empty_scan():
+    assert parse(_json({"SchemaVersion": 2, "ArtifactName": "scratch"})).findings == []
+
+
+def test_overlong_cve_ids_ignored():
+    doc = {"matches": [{"vulnerability": {"id": "CVE-2020-" + "1" * 5000}, "artifact": {"name": "a"}}]}
+    assert parse(_json(doc)).findings[0].cve is None
+
+
+def test_finding_cap(monkeypatch):
+    monkeypatch.setattr(parsers, "MAX_FINDINGS", 2)
+    rows = "".join(f"CVE-2020-{i:04d}\n" for i in range(3))
+    with pytest.raises(ParseError, match="too many findings"):
+        parse(("cve\n" + rows).encode())

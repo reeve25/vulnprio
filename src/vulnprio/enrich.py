@@ -25,9 +25,8 @@ log = logging.getLogger(__name__)
 class Enricher:
     """Holds a per-process cache so a warm Lambda makes ~zero external calls."""
 
-    def __init__(self, client: httpx.Client | None = None, ttl: float = CACHE_TTL_S):
+    def __init__(self, client: httpx.Client | None = None):
         self.client = client or httpx.Client(timeout=10.0, headers={"User-Agent": "vulnprio"})
-        self.ttl = ttl
         self._kev: dict[str, dict] = {}
         self._kev_at = float("-inf")
         self.kev_version: str | None = None
@@ -37,7 +36,7 @@ class Enricher:
         self._scores_at = time.monotonic()
 
     def _load_kev(self) -> None:
-        if time.monotonic() - self._kev_at < self.ttl:
+        if time.monotonic() - self._kev_at < CACHE_TTL_S:
             return
         resp = self.client.get(KEV_URL)
         resp.raise_for_status()
@@ -50,7 +49,7 @@ class Enricher:
         self._kev_at = time.monotonic()
 
     def _load_epss(self, cves: list[str]) -> None:
-        if time.monotonic() - self._scores_at > self.ttl:
+        if time.monotonic() - self._scores_at > CACHE_TTL_S:
             self._epss.clear()
             self._nvd.clear()
             self._scores_at = time.monotonic()
@@ -89,12 +88,13 @@ class Enricher:
 
         try:
             self._load_kev()
-            for f in findings:
-                if f.cve and (hit := self._kev.get(f.cve)):
-                    f.kev, f.kev_date_added, f.kev_ransomware = True, hit["date_added"], hit["ransomware"]
         except (httpx.HTTPError, ValueError, KeyError) as e:
             log.warning("kev enrichment failed: %s", e)
             errors.append("CISA KEV unavailable")
+        # Applied outside the try: a failed refresh still uses the last good catalog.
+        for f in findings:
+            if f.cve and (hit := self._kev.get(f.cve)):
+                f.kev, f.kev_date_added, f.kev_ransomware = True, hit["date_added"], hit["ransomware"]
 
         try:
             self._load_epss(cves)

@@ -10,10 +10,15 @@ import gzip
 import io
 import json
 import re
+import zlib
 from dataclasses import dataclass, field
 
-MAX_DECOMPRESSED = 50 * 1024 * 1024  # zip-bomb guard for gzip uploads
-CVE_RE = re.compile(r"CVE-\d{4}-\d{4,}")
+# Caps sized ~4x the largest real sample (solr: 5.5 MB, 1,072 findings, 624 CVEs) to bound memory and
+# outbound EPSS calls. ponytail: fixed caps; make them per-tenant if large monorepo images need more.
+MAX_DECOMPRESSED = 20 * 1024 * 1024  # zip-bomb guard for gzip uploads
+MAX_FINDINGS = 10_000
+MAX_CVES = 3_000
+CVE_RE = re.compile(r"CVE-\d{4}-\d{4,10}(?!\d)")
 SEVERITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN")
 
 
@@ -176,8 +181,8 @@ def _sarif(doc: dict) -> Report:
             text = str((res.get("message") or {}).get("text") or "")
             got = {k: rx.search(text) for k, rx in _SARIF_FIELDS.items()}
             inline = got["pkg_inline"]
-            # SARIF has no CVSS field; `security-severity` is the closest thing (Trivy fills it
-            # with a per-severity constant, e.g. LOW=2.0), so treat it as approximate.
+            # SARIF has no CVSS field. `security-severity` is NOT a CVSS: Trivy writes a per-severity
+            # constant (LOW=2.0 even when NVD says 7.5), so it only sets severity; cvss stays None.
             score = _score((rule.get("properties") or {}).get("security-severity"))
             loc = ((res.get("locations") or [{}])[0].get("physicalLocation") or {}).get("artifactLocation") or {}
             vuln_id = _s(rule_id or rule.get("id")) or "UNKNOWN"
@@ -192,7 +197,6 @@ def _sarif(doc: dict) -> Report:
                     or _s(inline and inline.group(2)),
                     fixed_version=_s(got["fixed"] and got["fixed"].group(1).strip()),
                     severity=_severity(got["severity"].group(1)) if got["severity"] else _severity_from_score(score),
-                    cvss=score,
                     target=_s(loc.get("uri")),
                 )
             )
@@ -242,7 +246,7 @@ def _decompress(data: bytes) -> bytes:
         return data
     try:
         out = gzip.GzipFile(fileobj=io.BytesIO(data)).read(MAX_DECOMPRESSED + 1)
-    except (OSError, EOFError) as e:
+    except (OSError, EOFError, zlib.error) as e:
         raise ParseError(f"bad gzip data: {e}") from None
     if len(out) > MAX_DECOMPRESSED:
         raise ParseError("decompressed upload too large")
@@ -261,19 +265,26 @@ def parse(data: bytes) -> Report:
         doc = json.loads(text)
     except json.JSONDecodeError:
         doc = None
-    if isinstance(doc, dict):
-        if "SchemaVersion" in doc and "Results" in doc:
-            report = _trivy(doc)
-        elif "matches" in doc:
-            report = _grype(doc)
-        elif "runs" in doc:
-            report = _sarif(doc)
+    except RecursionError:
+        raise ParseError("JSON nested too deeply") from None
+    try:
+        if isinstance(doc, dict):
+            # Trivy omits `Results` when nothing is detected, so SchemaVersion alone identifies it.
+            if "SchemaVersion" in doc:
+                report = _trivy(doc)
+            elif "matches" in doc:
+                report = _grype(doc)
+            elif "runs" in doc:
+                report = _sarif(doc)
+            else:
+                raise ParseError("unrecognised JSON: expected Trivy, Grype, or SARIF")
+        elif doc is not None:
+            raise ParseError("unrecognised JSON: expected an object")
         else:
-            raise ParseError("unrecognised JSON: expected Trivy, Grype, or SARIF")
-    elif doc is not None:
-        raise ParseError("unrecognised JSON: expected an object")
-    else:
-        report = _csv(text)
+            report = _csv(text)
+    except (AttributeError, TypeError, KeyError, IndexError, csv.Error) as e:
+        # ponytail: one guard for wrong-shaped untrusted input -> 400; per-field validation if messages must be precise
+        raise ParseError(f"malformed {type(e).__name__}: input does not match the expected schema") from None
     # Scanners repeat a vuln per layer/result; keep one per (vuln, package, version, target).
     seen, unique = set(), []
     for f in report.findings:
@@ -282,4 +293,8 @@ def parse(data: bytes) -> Report:
             seen.add(key)
             unique.append(f)
     report.findings = unique
+    if len(unique) > MAX_FINDINGS:
+        raise ParseError(f"too many findings ({len(unique)} > {MAX_FINDINGS})")
+    if len({f.cve for f in unique if f.cve}) > MAX_CVES:
+        raise ParseError(f"too many distinct CVEs (> {MAX_CVES})")
     return report

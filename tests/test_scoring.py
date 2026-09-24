@@ -42,7 +42,7 @@ def test_reasons_explain_the_decision():
     ]
     g = F(vuln_id="DLA-1234-1")
     score(g)
-    assert g.reasons == ["No CVE id (DLA-1234-1); scored on severity only", "No fix available"]
+    assert g.reasons == ["No CVE id (DLA-1234-1); scored on CVSS only", "No fix available"]
 
 
 def test_rank_orders_by_tier_then_fixability_then_epss():

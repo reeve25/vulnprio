@@ -14,7 +14,7 @@
 | SARIF 2.1.0 | Trivy/Grype/any SARIF emitter | top-level `runs` |
 | CSV | generic export | header row with at least `cve` (case-insensitive); optional `package, version, fixed_version, severity, cvss, target` |
 
-Uploads are untrusted input: body ≤ 4 MB (API Gateway base64-encodes bodies and Lambda's sync payload cap is 6 MB), gzip bodies accepted and capped at 50 MB decompressed (zip-bomb guard), strict parsing, unknown format → 400. Grype GHSA matches are mapped to their CVE alias via `relatedVulnerabilities`.
+Uploads are untrusted input: body ≤ 4 MB (API Gateway base64-encodes bodies and Lambda's sync payload cap is 6 MB), gzip bodies accepted and capped at 20 MB decompressed (zip-bomb guard), at most 10,000 findings and 3,000 distinct CVEs per scan (bounds memory and outbound EPSS calls), strict parsing (any wrong-shaped input is a 400, never a 500), unknown format → 400. Grype GHSA matches are mapped to their CVE alias via `relatedVulnerabilities`. SARIF `security-severity` sets severity only; it is never treated as CVSS (Trivy writes a per-severity constant there).
 
 ### Normalized finding
 `vuln_id, cve (nullable), package, installed_version, fixed_version, severity, cvss, target, source_format` +

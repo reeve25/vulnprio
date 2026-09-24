@@ -33,7 +33,7 @@ def score(f: Finding) -> None:
     elif f.cve:
         reasons.append("No EPSS score")
     else:
-        reasons.append(f"No CVE id ({f.vuln_id}); scored on severity only")
+        reasons.append(f"No CVE id ({f.vuln_id}); scored on CVSS only")
     if f.cvss is not None:
         reasons.append(f"CVSS {f.cvss:.1f}")
     reasons.append(f"Fix: {f.fixed_version}" if f.fixed_version else "No fix available")

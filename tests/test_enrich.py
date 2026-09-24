@@ -106,3 +106,13 @@ def test_nvd_lookups_are_capped():
     findings = [Finding(f"CVE-2020-{i:05d}", f"CVE-2020-{i:05d}", "p") for i in range(20)]
     enricher.enrich(findings)
     assert feeds.calls.count("services.nvd.nist.gov") == 5
+
+
+def test_failed_kev_refresh_keeps_last_catalog():
+    enricher, feeds = make()
+    enricher.enrich([Finding("CVE-2021-44228", "CVE-2021-44228", "a", cvss=1.0)])
+    enricher._kev_at = float("-inf")  # force a refresh, which now fails
+    feeds.fail.add("www.cisa.gov")
+    f = Finding("CVE-2021-44228", "CVE-2021-44228", "a", cvss=1.0)
+    assert enricher.enrich([f]) == ["CISA KEV unavailable"]
+    assert f.kev
