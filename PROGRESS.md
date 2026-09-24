@@ -60,7 +60,7 @@ Be honest in interviews: it ran for about 2 hours on one day (2026-09-24), with 
 2. **End-to-end test passed through API Gateway:** 6 sample scans and 4,060 findings verified (pagination, rank order, P1 filter, SigV4 403s, malformed input → 400). All 5 alarms were OK, a forced alarm published to SNS, and all 5 dashboard widgets were populated.
 3. **Measured:** read p50/p95 was 68/97 ms from the client and ≤ 45/121 ms at API Gateway. Cold start p50 was 1.9 s. Ingest p50 was 383 ms for a small scan and 863 ms for a large one, and 3.1 s with cold feeds. 0 errors in 343 requests. Estimated cost at demo traffic is about $6.25/month list, about $1.15 after the free tiers.
 4. **Destroyed** (35/35), then verified: nothing tagged `project=vulnprio` remains except the Budget. The KMS key is PendingDeletion until 2026-10-01 and isn't billed.
-5. **Resume bullet now says "deployed and load-tested on AWS, then torn down"**, with the caveats listed next to it. CI status is in the log below.
+5. **Resume bullet now says "deployed and load-tested on AWS, then torn down"**, with the caveats listed next to it. Three commits pushed (`5d85cb6`, `cb8f4fd`, `38b151b`). gitleaks is clean, and CI (5/5 jobs) and Pages are green on `38b151b`.
 
 ### What was done
 - **Access:** `aws sts get-caller-identity` worked with the SSO Admin role. The CLI and Terraform 1.16.2 were installed, but the shell's PATH was stale, so it was reloaded from the registry.
@@ -174,3 +174,4 @@ Be honest in interviews: it ran for about 2 hours on one day (2026-09-24), with 
   - Container images are pinned by digest.
   - Removed dead code (`Store.ping`, the `DescribeTable` grant, unused CSS).
   - 61 unit + 2 integration tests; terraform test passes.
+- 2026-09-24 — Session 3: applied to us-west-2, e2e + latency measured, destroyed and verified empty. The $5 Budget stays.
