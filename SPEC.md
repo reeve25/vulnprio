@@ -54,7 +54,7 @@ Who calls the API in AWS: CI pipelines via `vulnprio push`, signing requests wit
 - **S3:** raw uploads (`raw/{scan_id}`), SSE, versioning, public access blocked, 90-day lifecycle.
 - **DynamoDB (single table, on-demand):** `PK=SCAN#{id}` / `SK=META` or `SK=F#{priority}#{rank:05d}` (priority filter = `begins_with` key condition, so pagination stays correct); scan index item `PK=SCANS`, `SK={created_at}#{id}`. Findings are written first, META + index last, so a failed ingest is never listed. TTL 90 days, matching the S3 lifecycle.
 
-### AWS (Terraform, validated only — never applied to a real account)
+### AWS (Terraform; applied once to us-west-2 on 2026-09-24, measured, then destroyed)
 API Gateway HTTP API (IAM auth) → Lambda (container image, AWS Lambda Web Adapter) → DynamoDB + S3. ECR for the image. Least-privilege IAM (per-table, per-bucket-prefix actions). CloudWatch: EMF metrics, alarms (Lambda errors, 5xx rate, enrichment errors; `notBreaching` on missing data so a quiet service doesn't page), dashboard. One KMS CMK for S3/DynamoDB/logs. GitHub OIDC role (no long-lived keys) scoped to this repo's `main` for ECR push. `terraform test` with a mocked provider asserts least-privilege and public-access-block invariants. Cost estimate in `docs/COST.md`.
 
 ### Local

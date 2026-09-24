@@ -1,7 +1,28 @@
 # Cost estimate (us-east-1, on-demand list prices)
 
-Never applied (DECISIONS #9); this is what `infra/` *would* cost. Prices are list prices as of writing; check
-<https://aws.amazon.com/pricing/> before relying on them.
+This file was written before deployment. The "demo traffic" section below uses per-request numbers measured on a
+real deployment. Prices are list prices as of writing; check <https://aws.amazon.com/pricing/> before relying on them.
+
+## Demo traffic, from numbers measured on 2026-09-24 (us-west-2)
+
+The deployed stack (DECISIONS #9) was billed **35.2 GB-s for 341 invocations** at 1 GB. It wrote **~709 items per scan**
+(11,315 findings plus metadata across 16 scans), and the image in ECR was **75 MB**. Scaled to a demo month of
+100 scans + 1,000 reads:
+
+| Line item | Monthly |
+|---|---|
+| Lambda (100 × 0.62 s + 1,000 × ~0.05 s ≈ 112 GB-s; 1,100 requests) | $0.002 |
+| API Gateway (1,100 requests) | $0.001 |
+| DynamoDB writes (~71k WRU, assuming items ≤ 1 KB) + storage + PITR | ≈ $0.13 |
+| S3, ECR (75 MB), X-Ray, logs | ≈ $0.01 |
+| KMS key | $1.00 |
+| CloudWatch: dashboard $3.00, 5 custom metrics $1.50, 5 alarms (6 metrics) $0.60 | $5.10 |
+| **Total, list price** | **≈ $6.25** |
+| **Total, after always-free tiers** (first 3 dashboards, 10 metrics, 10 alarms, 1M Lambda requests) | **≈ $1.15**, mostly the KMS key |
+
+The ~2 hours the stack actually ran cost a few cents (prorated KMS plus a few thousand DynamoDB writes). Cost Explorer
+lags about 24 h, so that figure is estimated, not billed. The $5/month AWS Budget (50%/100% actual, 100% forecast
+email alerts) stays in place. Unit prices are the us-east-1 list prices from the table below, not re-checked for us-west-2.
 
 ## Assumptions for the busy month
 - 1,000 scans/month, ~500 findings each, raw upload ~1 MB. Plus ~4,000 read requests (GET scan/findings).

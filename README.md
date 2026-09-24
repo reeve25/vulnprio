@@ -27,8 +27,23 @@ It also promotes things severity hides. For example, `CVE-2023-44487` (HTTP/2 Ra
 packages, but it is in KEV with an EPSS score of 99.99%. *(Numbers from KEV catalog 2026.09.23; EPSS changes daily.)*
 
 Python 3.12 · FastAPI · DynamoDB · S3 · Lambda · API Gateway · Terraform · LocalStack · GitHub Actions (OIDC).
-**The AWS infrastructure is written in Terraform and checked in CI (validate, mocked `terraform test`, checkov). It
-is deliberately never applied**, so this repo costs nothing to run ([why](DECISIONS.md#9-terraform-is-validated-never-applied)).
+The AWS infrastructure is written in Terraform and checked in CI (validate, mocked `terraform test`, checkov).
+**It was deployed to AWS once (2026-09-24), tested end to end and measured, then torn down.** Nothing runs between demos,
+so the repo costs nothing ([why](DECISIONS.md#9-terraform-is-validated-never-applied)).
+
+**Measured on 2026-09-24** (us-west-2, Lambda 1 GB, [details](docs/SLO.md#measured-on-2026-09-24)):
+
+| Metric | Result |
+|---|---|
+| Read latency at API Gateway | p50 24–45 ms, p95 ≤ 121 ms |
+| Read latency, client over the internet | p50 68 ms, p95 97 ms |
+| Cold start (Lambda init) | p50 1.9 s (7.8 s on first invoke after deploy) |
+| Ingest, 379 / 1,072 findings (warm) | 383 ms / 863 ms p50 |
+| Ingest with cold KEV/EPSS cache | 3.1 s |
+| Errors across 343 requests | 0 |
+| Est. cost at demo traffic (100 scans/mo) | ≈ $6.25 list, ≈ $1.15 after always-free tiers ([COST.md](docs/COST.md)) |
+
+![CloudWatch dashboard during the load test](docs/screenshots/cloudwatch-dashboard.png)
 
 ## Run it locally
 
@@ -59,7 +74,7 @@ flowchart LR
     CI["CI pipeline<br/>trivy / grype → vulnprio push<br/>(SigV4 via GitHub OIDC role)"]
     UI[Dashboard]
   end
-  subgraph aws["AWS (Terraform in infra/, validated, not applied)"]
+  subgraph aws["AWS (Terraform in infra/; deployed, measured, torn down)"]
     APIGW["API Gateway HTTP API<br/>IAM auth · throttling"]
     L["Lambda (container image)<br/>FastAPI via Lambda Web Adapter"]
     DDB[("DynamoDB<br/>single table · TTL 90d")]
@@ -138,12 +153,12 @@ act on this sprint, and P3 at 1% catches most of the remaining coverage. More de
 - **Observability.** The app writes JSON logs with a request id and CloudWatch Embedded Metric Format metrics (no agent and no
   `PutMetricData` calls). SLOs, the error budget policy and the alarm→runbook mapping are in [`docs/SLO.md`](docs/SLO.md).
   "Enrichment completeness" is its own SLI, because a scan ranked without KEV data still returns 201 while looking safe.
-- **Cost.** About $4.75/month idle at list price and about $7.50 at 1,000 scans/month ([`docs/COST.md`](docs/COST.md)). The
+- **Cost.** About $4.75/month idle at list price, about $6.25 at measured demo traffic, and about $7.50 at 1,000 scans/month ([`docs/COST.md`](docs/COST.md)). The
   Fargate + ALB and RDS + NAT alternatives it avoids cost roughly $45–50/month.
 - **Tests.** There are 61 unit tests, with parsers run against real scanner output and hostile inputs, and enrichment tested against
   mocked feeds. Two integration tests run the real DynamoDB/S3 APIs in LocalStack, covering a round trip of 880 findings,
   pagination and a tampered cursor. The unit coverage gate is 85%.
-- **Decisions.** 16 short ADRs in [`DECISIONS.md`](DECISIONS.md) cover choices such as FastAPI over Go, Lambda over Fargate,
+- **Decisions.** 18 short ADRs in [`DECISIONS.md`](DECISIONS.md) cover choices such as FastAPI over Go, Lambda over Fargate,
   DynamoDB over RDS, and why the sort key embeds the tier.
 
 ## What I'd do next
@@ -155,8 +170,8 @@ act on this sprint, and P3 at 1% catches most of the remaining coverage. More de
 3. **Async ingest for big scans.** Move to a presigned S3 upload, then an S3 event, SQS and a worker, to get past the 4 MB and 30 s
    API Gateway limits.
 4. **Trend view.** Track per-image burn-down of P1/P2 over time and time-to-remediate, which is the metric a vulnerability-management program reports.
-5. **Actually deploy it** behind a budget alarm, and replace the static alarm thresholds with multi-window burn-rate alerts
-   once there's real traffic to tune them against.
+5. **Run it continuously** with remote state and a CI deploy through the OIDC role. Then replace the static alarm
+   thresholds with multi-window burn-rate alerts once there's real traffic to tune them against.
 
 ## License
 

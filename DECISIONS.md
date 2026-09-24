@@ -28,6 +28,7 @@ tfsec is in maintenance mode (its checks moved into Trivy). One IaC scanner is e
 
 ### 9. Terraform is validated, never applied
 Requirement: no real AWS spend. CI runs `fmt -check`, `init -backend=false`, `validate`, and IaC scanners. Local dev runs the same container against LocalStack S3 + DynamoDB rather than applying the Terraform to LocalStack (API Gateway v2 and ECR are paid LocalStack features). Least privilege is proven with `terraform test` + `mock_provider` instead of a real apply.
+*Update 2026-09-24:* applied once to us-west-2 behind a $5 AWS Budget, measured, then destroyed (#17, #18, `docs/SLO.md`). The default posture is still "not running"; state stayed local because the stack lived for about 2 hours.
 
 ### 10. Dogfooding in CI
 The container-scan job pipes Trivy's JSON for vulnprio's own image into `vulnprio gate`, failing the build on P1/P2 findings that have a fix. This is the product's thesis applied to itself: block on exploitable risk, not on raw severity counts.
@@ -49,3 +50,11 @@ No shared secrets to rotate; CI gets short-lived credentials via GitHub OIDC. Th
 
 ### 16. Findings stored as a JSON string attribute
 Avoids boto3's float→Decimal conversion on every numeric field. Findings are never queried by attribute, only by key, so nothing is lost.
+
+### 17. Reserved concurrency is a variable; new accounts set it to -1
+First real apply (2026-09-24) failed on `PutFunctionConcurrency`: *"Specified ReservedConcurrentExecutions for function decreases account's UnreservedConcurrentExecution below its minimum value of [10]."* A new account's Lambda concurrency quota is 10 (not the documented 1,000 default), and AWS always keeps 10 unreserved, so **any** reservation fails. Terraform had already created the function and marked it tainted; a re-apply with `reserved_concurrency = -1` replaced it cleanly. The cost/abuse ceiling then comes from the API Gateway stage throttle (10 rps, burst 20) plus the account quota of 10. Once the quota is raised (Service Quotas request), set it back to 10.
+
+Nothing else broke on AWS: the KMS key policy's encryption-context grant let CloudWatch Logs create both encrypted log groups, and a forced `ALARM` state published to the KMS-encrypted SNS topic (`Successfully executed action`). Two local-tooling snags, not AWS issues: Windows PowerShell 5.1 corrupts `aws ecr get-login-password | docker login` (it rewrites piped native output, and ECR answers 400), so do that from Git Bash; and Git Bash rewrites `/aws/lambda/...` log group names into Windows paths (`MSYS_NO_PATHCONV=1`). The image is built with `--provenance=false`, because Lambda rejects the multi-manifest index BuildKit produces by default.
+
+### 18. `allow_destroy` for the demo teardown
+DynamoDB deletion protection, a non-empty versioned bucket and a non-empty ECR repo each block `terraform destroy`, which is the point for real data. `var.allow_destroy` (default `false`) flips all three: apply with `true`, then destroy. That keeps the safe default in code and makes teardown a two-command, reviewed step instead of manual console deletes. The KMS key can't be deleted immediately; `deletion_window_in_days = 7` (the minimum) and AWS doesn't bill keys pending deletion.
