@@ -1,0 +1,49 @@
+[project]
+name = "vulnprio"
+version = "0.1.0"
+description = "Rank vulnerability scanner findings by real-world exploitation risk (CISA KEV + FIRST EPSS), not CVSS alone."
+authors = [
+    { name = "Reeveson Masilamani", email = "182707807+reeve25@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+readme = "README.md"
+license = "MIT"
+dependencies = [
+    "boto3>=1.43.101",
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "uvicorn[standard]>=0.53.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.13,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.8",
+]
+
+[project.scripts]
+vulnprio = "vulnprio.cli:main"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM"]
+ignore = ["S101"]  # assert is fine in tests
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not integration'"
+markers = ["integration: needs LocalStack (docker compose up localstack)"]
+
+[tool.coverage.run]
+source = ["vulnprio"]
