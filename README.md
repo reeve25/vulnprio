@@ -13,6 +13,8 @@ vulnprio tells you which handful to fix first and explains each ranking.
 **▶ Live demo: https://reeve25.github.io/vulnprio/** shows real Trivy and Grype scans of public images, re-ranked against
 today's exploit data. CI rebuilds it on every push and weekly.
 
+[![vulnprio dashboard: solr:8.11.0, 385 HIGH/CRITICAL findings vs 83 that need action now](docs/screenshots/desktop.png)](https://reeve25.github.io/vulnprio/)
+
 | Image (public, old tag) | Findings | HIGH/CRITICAL by severity | **Act now (P1+P2)** |
 |---|---:|---:|---:|
 | `solr:8.11.0` (ships Log4Shell) | 1,072 | 385 | **83** |
@@ -27,8 +29,6 @@ packages, but it is in KEV with an EPSS score of 99.99%. *(Numbers from KEV cata
 Python 3.12 · FastAPI · DynamoDB · S3 · Lambda · API Gateway · Terraform · LocalStack · GitHub Actions (OIDC).
 **The AWS infrastructure is written in Terraform and checked in CI (validate, mocked `terraform test`, checkov). It
 is deliberately never applied**, so this repo costs nothing to run ([why](DECISIONS.md#9-terraform-is-validated-never-applied)).
-
-![vulnprio dashboard: solr:8.11.0, 385 HIGH/CRITICAL findings vs 83 that need action now](docs/dashboard.png)
 
 ## Run it locally
 
