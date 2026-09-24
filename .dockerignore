@@ -1,0 +1,11 @@
+.venv
+.git
+.pytest_cache
+.ruff_cache
+samples
+tests
+infra
+site
+docs
+*.md
+!README.md
