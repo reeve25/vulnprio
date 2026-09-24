@@ -12,7 +12,7 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Third-party actions are pinned to commit SHAs; scanners run as pinned containers/tools
+# Third-party actions are pinned to commit SHAs and images to digests (tags can move); scanners run as containers/tools
 # so every step here is also a command you can run locally.
 jobs:
   test:
@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       localstack:
-        image: localstack/localstack:4.14
+        image: localstack/localstack:4.14@sha256:3ebc37595918b8accb852f8048fef2aff047d465167edd655528065b07bc364a
         ports: ["4566:4566"]
         env:
           SERVICES: s3,dynamodb
@@ -77,7 +77,7 @@ jobs:
       - name: Trivy image scan
         run: >-
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
-          aquasec/trivy:0.74.0 image --quiet --format json vulnprio:ci > trivy.json
+          aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image --quiet --format json vulnprio:ci > trivy.json
       - name: Gate on vulnprio's own ranking (dogfooding)
         # Fails on fixable P1/P2 (KEV or EPSS >= 10%), on expired waivers, or if KEV/EPSS are unreachable.
         run: uv run vulnprio gate trivy.json --fail-on P1,P2 --waivers .vulnprio-waivers
@@ -89,4 +89,4 @@ jobs:
         with:
           fetch-depth: 0
       - name: gitleaks (full history)
-        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 git /repo --no-banner --redact
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git /repo --no-banner --redact
