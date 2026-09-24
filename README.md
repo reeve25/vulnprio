@@ -140,7 +140,7 @@ act on this sprint, and P3 at 1% catches most of the remaining coverage. More de
   "Enrichment completeness" is its own SLI, because a scan ranked without KEV data still returns 201 while looking safe.
 - **Cost.** About $4.75/month idle at list price and about $7.50 at 1,000 scans/month ([`docs/COST.md`](docs/COST.md)). The
   Fargate + ALB and RDS + NAT alternatives it avoids cost roughly $45–50/month.
-- **Tests.** There are 59 unit tests, with parsers run against real scanner output and hostile inputs, and enrichment tested against
+- **Tests.** There are 61 unit tests, with parsers run against real scanner output and hostile inputs, and enrichment tested against
   mocked feeds. Two integration tests run the real DynamoDB/S3 APIs in LocalStack, covering a round trip of 880 findings,
   pagination and a tampered cursor. The unit coverage gate is 85%.
 - **Decisions.** 16 short ADRs in [`DECISIONS.md`](DECISIONS.md) cover choices such as FastAPI over Go, Lambda over Fargate,
